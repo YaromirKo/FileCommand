@@ -31,6 +31,10 @@ parser_workspace.add_argument('-go-workspace', "-w", type=int)
 parser_workspace.add_argument('-show-workspace', "-sh", action="store_true")
 
 subparsers.add_parser('o', help="open files by index").add_argument('open_files', action="extend", nargs="+", type=int)
+subparsers.add_parser('c').add_argument('copy_all_or_selected', action="extend", nargs="+")
+subparsers.add_parser('reset').add_argument('reset_copy', action="store_true")
+subparsers.add_parser('p').add_argument('paste', action="store_true")
+
 
 DOC_HELP = """File command.
 
@@ -48,9 +52,11 @@ Commads:
   g             Go to file or open file
   b             Back
   o             Open files
-  c             Copy            # TODO
-  p             Paste           # TODO
-  r             Reset copy      # TODO
+  c             Copy            
+  p             Paste           
+  reset         Reset buffer copy, move, delete
+  move          Move            # TODO
+  delete        Delete          # TODO
 
 Your workspaces:
   w -s          Set new or update workspaces

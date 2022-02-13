@@ -9,16 +9,19 @@ from rich import print
 from rich import box
 
 from rich.table import Table
-from rich.panel import Panel
 from rich.columns import Columns
 from rich.prompt import Confirm
 from rich.tree import Tree
 from rich.console import Console
 from rich.console import Group
+from rich.progress import Progress
 from rich.filesize import decimal
 
-from type_color import TYPE_COLOR
-
+from utility import _panel
+from utility import _get_extension_name
+from utility import _set_icon_folder_name
+from utility import _get_val_config
+from utility import _copytree
 
 CONFIG_NAME = 'config.json'
 FORMAT_DATA = "%d/%m/%y %H:%M"
@@ -35,46 +38,12 @@ file.close()
 
 # CONFIG_LAYOUT =     _get_val_config("layout", "[Group(A, B), C, D]")
 
-def _panel(body, title="", expand=True):
-    return(
-        Panel(
-            body, 
-            title=title, 
-            expand=expand, 
-            border_style="green", padding=(0,0))
-    )
-    
-
-def _get_extension_name(name):
-    if name.lower() in TYPE_COLOR:
-        return f"[{TYPE_COLOR[name.lower()]}]{name}[/]"
-    return name
-
-
-def trim_name(name, num=35):
-    if num != None and len(name) > num:
-        return f'{name[:num]}...'
-    return name
-
-
-def _set_icon_folder_name(name):
-    if name.is_dir():
-        return f':open_file_folder: {trim_name(name.name)}'
-    if name.name == ".gitignore":
-        return f'[size=12]:gear:[/]{trim_name(name.name)}'
-    return trim_name(name.name)
-
-
-def _get_val_config(obj, key, default=None):
-    if key in obj:
-        return obj[key]
-    return default
-
 _console = Console()
+
 
 class FileCommand:
 
-    def __init__(self, doc_help):
+    def __init__(self, doc_help, debug=True):
 
         self.doc_help = doc_help
 
@@ -87,7 +56,8 @@ class FileCommand:
         self.ui_workspaces = ""
         self.ui_current_dir = ""
         
-        self.array_of_current_folder = []
+        self.buffer_current_folder = []
+        self.buffer_copy = []
 
 
     def go_folder(self, num):
@@ -97,7 +67,7 @@ class FileCommand:
             if num == -1:
                 path = f"{path}\\"
         else:
-            path = self.array_of_current_folder[num-1]
+            path = self.buffer_current_folder[num-1]
 
         path = Path(path)
 
@@ -183,14 +153,49 @@ class FileCommand:
 
     def open_files(self, indexes):
 
-        paths = [f'"{str(self.array_of_current_folder[i - 1])}"' for i in indexes]
-
+        paths = [f'"{str(self.buffer_current_folder[i - 1])}"' for i in indexes]
         self.ui_sidebar = '\n'.join(["Opened:", *paths])
         
         if WIN:
             os.system(f"explorer {' & '.join(paths)}")
         if LINUX:
             os.system(f"open {' '.join(paths)}")
+            
+    
+    def _copy(self):
+        # _into = Path(obj["into"])
+        # _from = Path(obj["from"])
+        # _formats = "*"
+        # print(self.current_dir)
+        with Progress() as progress:
+            
+            task1 = progress.add_task("[yellow]Copy files...", total=len(self.buffer_copy))
+            while not progress.finished:
+                for index, item in enumerate(self.buffer_copy):
+                    _copytree(item, self.current_dir, "*")
+                    progress.update(task1, completed=index+1)
+
+
+    def copy_all_or_selected(self, nums):
+
+        self.buffer_copy = []
+        if nums[0] != ".":
+            for num in nums:
+                self.buffer_copy.append(self.buffer_current_folder[int(num)-1])
+        else:
+            self.buffer_copy = self.buffer_current_folder
+        self.ui_sidebar = '\n'.join(["Copy:", *[item.name for item in self.buffer_copy]])
+
+
+    def reset_copy(self):
+        self.buffer_copy = []
+        self.ui_sidebar = ""
+    
+
+    def paste(self):
+        self._copy()
+        self.reset_copy()
+        self.get_table()
 
 
     def get_table(self, directory_path=None):
@@ -198,7 +203,7 @@ class FileCommand:
         if directory_path is None:
             directory_path = self.current_dir    
         
-        self.array_of_current_folder = []
+        self.buffer_current_folder = []
         
         table = Table(expand=False, style="#99A799", box=box.ROUNDED, show_lines=True)    
 
@@ -208,11 +213,11 @@ class FileCommand:
         table.add_column("Date modified", style="yellow")
         table.add_column("Size", justify="right", style="white")
 
-        self.array_of_current_folder = Path(directory_path).iterdir()
-        self.array_of_current_folder = sorted(self.array_of_current_folder, key=lambda path: (path.is_dir(), path.suffix[1:], path.stat().st_mtime, path.name), reverse=True) 
+        self.buffer_current_folder = Path(directory_path).iterdir()
+        self.buffer_current_folder = sorted(self.buffer_current_folder, key=lambda path: (path.is_dir(), path.suffix[1:], path.stat().st_mtime, path.name), reverse=True) 
 
-        for index, item in enumerate(self.array_of_current_folder):
-            # self.array_of_current_folder.append(item)
+        for index, item in enumerate(self.buffer_current_folder):
+            # self.buffer_current_folder.append(item)
             file_size = decimal(item.stat().st_size) if not item.is_dir() else ""
             item_type = "" if item.is_dir() else _get_extension_name(item.suffix[1:])
             date = datetime.fromtimestamp(item.stat().st_mtime).strftime(FORMAT_DATA)
@@ -239,7 +244,7 @@ class FileCommand:
         self.current_dir = dir_path
         self.get_table(dir_path)
         self.get_current_dir()
-        self.ui_sidebar = ""
+        # self.ui_sidebar = ""
 
     
     def help(self):
